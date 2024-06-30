@@ -1,0 +1,86 @@
+# -*- coding: utf-8 -*-
+
+'''
+This code solves the integrated rate law for a laminar flow reactor (LFR)
+(1) Uses scipy.integrate.quad to solve the integral
+(2) uses scipy.optimize.root to solve for the rate constant (k)
+To improve ease of use, root automatically tries multiple initial guesses
+The result of the data can then be used in the van't Hoff method to determine if 
+first order is a reasonable fit
+The integrated rate law is defined as in:
+Levenspiel, O. The chemical reactor omnibook
+Required Experimental Data: spacetime (tau_array)
+normalized concentration (i.e., Ca/Ca0 [CaCao_array])
+'''
+
+import numpy as np
+from scipy.integrate import quad
+from scipy.optimize import root
+
+# solving the first-order LFR for k (van't Hoff method)
+
+tau_array = np.array([174.75, # spacetime data; s
+                      174.75,
+                      139.80,
+                      116.50,
+                      139.80,
+                      116.50,
+                      116.50,
+                      174.75,
+                      139.80,
+                      116.50,
+                      174.75,
+                      233.00,
+                      349.50])
+
+CaCao_array = ([0.708443479, # Ca/Cao data
+                0.666695415,
+                0.74706242,
+                0.688053759,
+                0.555806869,
+                0.592408418,
+                0.592928053,
+                0.513188914,
+                0.616773008,
+                0.665182345,
+                0.545049998,
+                0.448427287,
+                0.351960956])
+
+def integral(k, lower_limit):
+    '''
+    Solves the integral of the first order integrated rate law
+    t is variable of integration
+    '''
+    quad_result = quad(lambda t, k: np.exp(-k*t)/t**3, lower_limit, np.inf, args=(k))
+
+    return quad_result[0]
+
+def solver(k, CaCao, tau):
+    '''
+    Solves for unknown k by setting the LFR equation equal to 0
+    '''
+    lower_limit = tau/2
+    LFR_root = integral(k, lower_limit) - CaCao*2/tau**2
+
+    return LFR_root
+
+guesses = np.linspace(1E-4,10,100)  # List of initial guesses
+
+solution_array = []
+
+for i, tau_val in enumerate(tau_array): # solving for each k
+    CaCao_single = CaCao_array[i]
+    solution_found = False
+
+    for guess in guesses:
+        solution = root(solver, guess, args=(CaCao_single, tau_val))
+
+        if solution.success:
+            solution_array = np.append(solution_array, solution.x[0])
+            solution_found = True
+            break
+    if not solution_found:
+        solution_array = np.append(solution_array, np.nan)
+
+print(solution_array)

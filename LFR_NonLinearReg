@@ -1,0 +1,91 @@
+# -*- coding: utf-8 -*-
+
+'''
+This code solves performs non-linear regression on 
+the n-th order integrated rate law for a laminar 
+flow reactior (LFR) to solve for unknown n, k 
+(1) Uses scipy.integrate.quad to solve the integral
+(2) uses scipy.optimize.curve_fit to fit n, k
+To improve ease of use, curve fit root automatically 
+tries multiple initial guesses for n, k
+The integrated rate law is defined as in:
+Levenspiel, O. The chemical reactor omnibook
+Required Experimental Data: spacetime (tau_array),
+concentration (Ca_array)
+'''
+
+import random
+import numpy as np
+from scipy.integrate import quad
+from scipy.optimize import curve_fit
+
+tau_array = np.array([139.8,
+                      116.5,
+                      174.75,
+                      233,
+                      349.5])
+
+Ca_array = np.array([0.0308387,
+                     0.0332591,
+                     0.0272525,
+                     0.0224214,
+                     0.0175980])
+
+Cao = 0.05 # (mol/L); initial concentration
+
+def integrand(t, n, k): # integral definition
+    '''
+    Defines the n-th order LFR integrated rate law
+    from Levenspiel, O. The chemical reactor omnibook
+    t is variable of integration
+    '''
+    function = (Cao**(1.0-n)-(1.0-n)*k*t)**(1.0/(1.0-n))/(t**3)
+    return function
+
+def fit(tau, n, k): # curve fitting function
+    '''
+    Fits the unknown n and k via non-linear regression to find the 
+    proper reaction order
+    '''
+
+    int_array = np.array([]) # initializing
+
+    for _, tau_val in enumerate(tau): # solving the integral at each point
+        lower_limit = tau_val/2
+        quad_result = quad(integrand, lower_limit, np.inf, epsabs=2E-15,
+                           epsrel=2E-15, limit=10000, limlst=1000, args=(n,k))
+        int_array = np.append(int_array, quad_result[0])
+
+    result = (tau**2/2)*int_array # solving the actual function
+
+    return result
+
+def random_guess():
+    '''
+    Random guesses for n, k 
+    '''
+    p0_guess = (random.uniform(0.5, 5), random.uniform(0.01, 1))
+    return p0_guess
+
+static_bounds = (0, 5)
+
+num_attempts = 100
+solution_found = False
+
+for _ in range(num_attempts):
+    p0 = random_guess()
+    try:
+        all_results = curve_fit(fit, tau_array, Ca_array, p0=p0, bounds=static_bounds, method='trf')
+        n_fit, k_fit = all_results[0]
+        solution_found = True
+        break
+    except (RuntimeError, ValueError) as e:
+        print(f"Fit failed with initial guess {p0}: {e}")
+
+if solution_found:
+    print('----------------------------------------------------')
+    print(f"Fit succeeded with n_fit = {n_fit:.3f}, k_fit = {k_fit:.3f}")
+    print(f"Initial guesses were tau = {p0[0]:.3f}, k = {p0[1]:.3f}")
+    print('----------------------------------------------------')
+else:
+    print("All fits failed. Please try different initial guesses or bounds.")
